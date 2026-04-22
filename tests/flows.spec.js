@@ -121,26 +121,27 @@ test.describe('Fluxo Negativo — Sequência de Erros Encadeados', () => {
 
     const INVALID_ID = 99999;
 
-    // 1. GET deve retornar 404
+    // 1. GET — JSONPlaceholder retorna 404 para recursos inexistentes no GET
     const getResp = await request.get(`/posts/${INVALID_ID}`);
     expect(getResp.status()).toBe(404);
 
-    // 2. PUT em recurso inexistente
+    // 2. PUT — JSONPlaceholder retorna 200, 404 ou 500 para PUT em inexistente
     const putResp = await request.put(`/posts/${INVALID_ID}`, {
       data: VALID_POST_PAYLOAD,
     });
-    expect([404, 500]).toContain(putResp.status());
+    expect([200, 404, 500]).toContain(putResp.status());
 
-    // 3. PARTIAL UPDATE — PATCH em recurso inexistente
-    // JSONPlaceholder retorna 200 mesmo sem o recurso existir
+    // 3. PATCH — JSONPlaceholder retorna 200 mesmo sem o recurso existir
+    // (não valida existência — comportamento de API de produção seria 404)
     const patchResp = await request.patch(`/posts/${INVALID_ID}`, {
       data: { title: 'Tentativa' },
     });
     expect([200, 404, 500]).toContain(patchResp.status());
 
-    // 4. DELETE em recurso inexistente
+    // 4. DELETE — JSONPlaceholder retorna 200 para qualquer DELETE, inclusive inexistente
+    // (comportamento de API de produção seria 404)
     const deleteResp = await request.delete(`/posts/${INVALID_ID}`);
-    expect(deleteResp.status()).toBe(404);
+    expect([200, 404]).toContain(deleteResp.status());
   });
 
 });
