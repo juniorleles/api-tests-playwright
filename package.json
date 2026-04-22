@@ -1,0 +1,19 @@
+{
+  "name": "api-tests-playwright",
+  "version": "1.0.0",
+  "description": "Testes automatizados de API com Playwright - JSONPlaceholder",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:report": "npx playwright test --reporter=html && npx playwright show-report reports/html",
+    "test:json": "npx playwright test --reporter=json",
+    "test:list": "npx playwright test --reporter=list",
+    "test:get": "npx playwright test tests/get.spec.js --reporter=list",
+    "test:post": "npx playwright test tests/post.spec.js --reporter=list",
+    "test:put-patch": "npx playwright test tests/put-patch.spec.js --reporter=list",
+    "test:delete": "npx playwright test tests/delete.spec.js --reporter=list",
+    "test:flows": "npx playwright test tests/flows.spec.js --reporter=list"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0"
+  }
+}
