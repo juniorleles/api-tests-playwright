@@ -1,20 +1,30 @@
 /**
- * TAREFA 2 — Testes DELETE
+ * Testes DELETE
  * Endpoint: /posts/:id, /comments/:id, /todos/:id
  *
  * NOTA: JSONPlaceholder retorna 200 para qualquer DELETE, mesmo IDs inválidos.
  * Testes negativos documentam esse comportamento real vs. o esperado em produção.
+ *
+ * Melhorias aplicadas:
+ * - Assertions com mensagens descritivas
+ * - Validação do contrato de resposta vazia
+ * - Organização de cenários por categoria
  */
 
 const { test, expect } = require('@playwright/test');
 
+// ─────────────────────────────────────────────────────────────
+// DELETE /posts/:id
+// ─────────────────────────────────────────────────────────────
 test.describe('DELETE /posts/:id', () => {
 
-  test('POSITIVO — deleta post existente e retorna 200', async ({ request }) => {
+  test('POSITIVO — deleta post existente, retorna 200 e corpo vazio', async ({ request }) => {
     const response = await request.delete('/posts/1');
-    expect(response.status()).toBe(200);
+
+    expect(response.status(), 'DELETE deve retornar 200').toBe(200);
     const body = await response.json();
-    expect(body).toEqual({});
+    expect(body, 'Corpo do DELETE deve ser objeto vazio').toEqual({});
+    expect(Object.keys(body).length, 'Não deve retornar campos do recurso deletado').toBe(0);
   });
 
   test('POSITIVO — deleta post do meio da lista (id=50)', async ({ request }) => {
@@ -27,19 +37,10 @@ test.describe('DELETE /posts/:id', () => {
     expect(response.status()).toBe(200);
   });
 
-  test('POSITIVO — resposta do DELETE não contém dados do recurso deletado', async ({ request }) => {
-    const response = await request.delete('/posts/2');
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(Object.keys(body).length).toBe(0);
-  });
-
   test('NEGATIVO — delete em ID inexistente: JSONPlaceholder retorna 200 (produção deveria retornar 404)', async ({ request }) => {
     const response = await request.delete('/posts/99999');
-    // JSONPlaceholder não valida existência do recurso — retorna 200 sempre
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(body).toEqual({});
+    expect(response.status(), 'JSONPlaceholder não valida existência — retorna 200').toBe(200);
+    expect(await response.json()).toEqual({});
   });
 
   test('NEGATIVO — delete com ID zero: JSONPlaceholder retorna 200 (produção deveria retornar 400/404)', async ({ request }) => {
@@ -59,35 +60,44 @@ test.describe('DELETE /posts/:id', () => {
 
   test('NEGATIVO — delete na coleção /posts sem ID retorna erro', async ({ request }) => {
     const response = await request.delete('/posts');
-    expect([404, 405, 400]).toContain(response.status());
+    expect([404, 405, 400], 'DELETE sem ID deve retornar erro').toContain(response.status());
   });
 
   test('IDEMPOTÊNCIA — JSONPlaceholder retorna 200 em ambos os DELETEs (sem persistência real)', async ({ request }) => {
     const first = await request.delete('/posts/10');
-    expect(first.status()).toBe(200);
-    // Sem persistência real, JSONPlaceholder repete 200 — produção retornaria 404
+    expect(first.status(), 'Primeiro DELETE deve retornar 200').toBe(200);
+
+    // JSONPlaceholder não persiste — produção retornaria 404 no segundo DELETE
     const second = await request.delete('/posts/10');
-    expect(second.status()).toBe(200);
+    expect(second.status(), 'JSONPlaceholder repete 200 sem persistência').toBe(200);
   });
 
 });
 
+// ─────────────────────────────────────────────────────────────
+// DELETE /comments/:id
+// ─────────────────────────────────────────────────────────────
 test.describe('DELETE /comments/:id', () => {
 
-  test('POSITIVO — deleta comentário existente e retorna 200', async ({ request }) => {
+  test('POSITIVO — deleta comentário existente e retorna 200 com corpo vazio', async ({ request }) => {
     const response = await request.delete('/comments/1');
+
     expect(response.status()).toBe(200);
-    expect(await response.json()).toEqual({});
+    expect(await response.json(), 'Corpo deve ser objeto vazio').toEqual({});
   });
 
   test('NEGATIVO — delete em comentário inexistente: JSONPlaceholder retorna 200 (produção deveria retornar 404)', async ({ request }) => {
     const response = await request.delete('/comments/99999');
+
     expect(response.status()).toBe(200);
     expect(await response.json()).toEqual({});
   });
 
 });
 
+// ─────────────────────────────────────────────────────────────
+// DELETE /todos/:id
+// ─────────────────────────────────────────────────────────────
 test.describe('DELETE /todos/:id', () => {
 
   test('POSITIVO — deleta todo existente e retorna 200', async ({ request }) => {
@@ -102,12 +112,19 @@ test.describe('DELETE /todos/:id', () => {
 
 });
 
+// ─────────────────────────────────────────────────────────────
+// DELETE — Validação de Headers
+// ─────────────────────────────────────────────────────────────
 test.describe('DELETE — Validação de Headers', () => {
 
   test('POSITIVO — DELETE retorna Content-Type JSON', async ({ request }) => {
     const response = await request.delete('/posts/3');
+
     expect(response.status()).toBe(200);
-    expect(response.headers()['content-type']).toContain('application/json');
+    expect(
+      response.headers()['content-type'],
+      'Content-Type deve ser application/json'
+    ).toContain('application/json');
   });
 
 });

@@ -1,53 +1,45 @@
 /**
- * TAREFA 2 — Testes PUT e PATCH
+ * Testes PUT e PATCH
  * Endpoint: /posts/:id, /users/:id
- * PUT: substituição completa | PATCH: atualização parcial
+ *
+ * Melhorias aplicadas:
+ * - Validação por contrato no retorno (campos e tipos)
+ * - Assertions descritivas
+ * - Uso de buildPostPayload para payloads variados
  */
 
 const { test, expect } = require('@playwright/test');
-const {
-  validateJsonHeaders,
-  VALID_POST_PAYLOAD,
-} = require('../utils/helpers');
+const { validateJsonHeaders, VALID_POST_PAYLOAD, buildPostPayload } = require('../utils/helpers');
+const { validatePostContract, validateUserContract } = require('../contracts/schemas');
 
 // ─────────────────────────────────────────────────────────────
 // PUT /posts/:id — substituição completa
 // ─────────────────────────────────────────────────────────────
 test.describe('PUT /posts/:id', () => {
 
-  test('POSITIVO — atualiza post existente com payload completo e retorna 200', async ({ request }) => {
-    const updatedPost = {
-      id: 1,
-      title: 'Título Atualizado via PUT',
-      body: 'Corpo completamente substituído via método PUT no teste automatizado',
-      userId: 1,
-    };
+  test('POSITIVO — atualiza post com payload completo, retorna 200 e valida contrato', async ({ request }) => {
+    const payload = { id: 1, title: 'Título Atualizado via PUT', body: 'Corpo substituído via PUT', userId: 1 };
+    const response = await request.put('/posts/1', { data: payload });
 
-    const response = await request.put('/posts/1', {
-      data: updatedPost,
-    });
-
-    expect(response.status()).toBe(200);
+    expect(response.status(), 'PUT deve retornar 200').toBe(200);
     await validateJsonHeaders(response, expect);
 
     const post = await response.json();
+    validatePostContract(post, expect);
     expect(post.id).toBe(1);
-    expect(post.title).toBe(updatedPost.title);
-    expect(post.body).toBe(updatedPost.body);
-    expect(post.userId).toBe(updatedPost.userId);
+    expect(post.title, 'Title deve refletir o update').toBe(payload.title);
+    expect(post.body, 'Body deve refletir o update').toBe(payload.body);
+    expect(post.userId).toBe(payload.userId);
   });
 
-  test('POSITIVO — PUT retorna o recurso atualizado no corpo', async ({ request }) => {
+  test('POSITIVO — PUT retorna o recurso completo (todos os campos do contrato)', async ({ request }) => {
     const response = await request.put('/posts/5', {
-      data: { ...VALID_POST_PAYLOAD, id: 5 },
+      data: buildPostPayload({ id: 5 }),
     });
 
     expect(response.status()).toBe(200);
     const post = await response.json();
-    expect(post).toHaveProperty('id');
-    expect(post).toHaveProperty('title');
-    expect(post).toHaveProperty('body');
-    expect(post).toHaveProperty('userId');
+    validatePostContract(post, expect);
   });
 
   test('POSITIVO — atualiza último post (id=100)', async ({ request }) => {
@@ -56,41 +48,29 @@ test.describe('PUT /posts/:id', () => {
     });
 
     expect(response.status()).toBe(200);
+    const post = await response.json();
+    validatePostContract(post, expect);
   });
 
-  test('NEGATIVO — PUT em post inexistente retorna 500 (JSONPlaceholder)', async ({ request }) => {
-    const response = await request.put('/posts/99999', {
-      data: VALID_POST_PAYLOAD,
-    });
-
-    // JSONPlaceholder retorna 500 ao tentar PUT em recurso não existente
-    expect([404, 500]).toContain(response.status());
+  test('NEGATIVO — PUT em post inexistente retorna 500 (JSONPlaceholder sem persistência)', async ({ request }) => {
+    const response = await request.put('/posts/99999', { data: VALID_POST_PAYLOAD });
+    expect([404, 500], 'ID inexistente deve retornar 404 ou 500').toContain(response.status());
   });
 
-  test('NEGATIVO — PUT sem corpo retorna erro', async ({ request }) => {
-    const response = await request.put('/posts/1', {
-      data: {},
-    });
-
-    // Deve retornar 200 mas com objeto vazio (comportamento JSONPlaceholder)
+  test('NEGATIVO — PUT com corpo vazio (documenta comportamento)', async ({ request }) => {
+    const response = await request.put('/posts/1', { data: {} });
     expect([200, 400]).toContain(response.status());
   });
 
-  test('NEGATIVO — PUT com ID no corpo diferente do ID na URL', async ({ request }) => {
+  test('NEGATIVO — PUT com ID no corpo diferente do ID na URL (documenta conflito)', async ({ request }) => {
     const response = await request.put('/posts/1', {
       data: { id: 999, title: 'Conflito de ID', body: 'teste', userId: 1 },
     });
-
-    // Documenta comportamento da API com IDs conflitantes
     expect([200, 400, 409]).toContain(response.status());
   });
 
-  test('NEGATIVO — método PUT em endpoint de coleção retorna 200 (JSONPlaceholder permissivo)', async ({ request }) => {
-    const response = await request.put('/posts', {
-      data: VALID_POST_PAYLOAD,
-    });
-
-    // Comportamento não esperado mas documentado
+  test('NEGATIVO — PUT em coleção sem ID (documenta comportamento)', async ({ request }) => {
+    const response = await request.put('/posts', { data: VALID_POST_PAYLOAD });
     expect([200, 404, 405]).toContain(response.status());
   });
 
@@ -101,30 +81,27 @@ test.describe('PUT /posts/:id', () => {
 // ─────────────────────────────────────────────────────────────
 test.describe('PATCH /posts/:id', () => {
 
-  test('POSITIVO — atualiza apenas o título com PATCH e retorna 200', async ({ request }) => {
-    const response = await request.patch('/posts/1', {
-      data: { title: 'Apenas o título foi alterado via PATCH' },
-    });
+  test('POSITIVO — atualiza apenas o título e valida que outros campos são preservados', async ({ request }) => {
+    const newTitle = 'Apenas o título foi alterado via PATCH';
+    const response = await request.patch('/posts/1', { data: { title: newTitle } });
 
-    expect(response.status()).toBe(200);
+    expect(response.status(), 'PATCH deve retornar 200').toBe(200);
     await validateJsonHeaders(response, expect);
 
     const post = await response.json();
-    expect(post.title).toBe('Apenas o título foi alterado via PATCH');
-    // Os outros campos devem ser mantidos
-    expect(post).toHaveProperty('body');
-    expect(post).toHaveProperty('userId');
+    expect(post.title, 'Title deve refletir o PATCH').toBe(newTitle);
+    expect(post, 'Body deve ser preservado').toHaveProperty('body');
+    expect(post, 'UserId deve ser preservado').toHaveProperty('userId');
+    expect(post, 'Id deve ser preservado').toHaveProperty('id');
   });
 
-  test('POSITIVO — atualiza apenas o body, mantém title original', async ({ request }) => {
-    const response = await request.patch('/posts/1', {
-      data: { body: 'Apenas o body foi alterado' },
-    });
+  test('POSITIVO — atualiza apenas o body, mantém os demais campos', async ({ request }) => {
+    const response = await request.patch('/posts/1', { data: { body: 'Apenas o body foi alterado' } });
 
     expect(response.status()).toBe(200);
     const post = await response.json();
     expect(post.body).toBe('Apenas o body foi alterado');
-    expect(post.title).toBeTruthy(); // título original mantido
+    expect(post.title, 'Title original deve ser mantido').toBeTruthy();
   });
 
   test('POSITIVO — PATCH com múltiplos campos simultâneos', async ({ request }) => {
@@ -141,30 +118,22 @@ test.describe('PATCH /posts/:id', () => {
     expect(post.body).toBe('Body também atualizado no mesmo PATCH');
   });
 
-  test('NEGATIVO — PATCH em post inexistente: JSONPlaceholder retorna 200 (produção deveria retornar 404)', async ({ request }) => {
+  test('NEGATIVO — PATCH em post inexistente (JSONPlaceholder retorna 200, produção deveria ser 404)', async ({ request }) => {
     const response = await request.patch('/posts/99999', {
-      data: { title: 'Tentativa de patch em recurso inexistente' },
+      data: { title: 'Tentativa em recurso inexistente' },
     });
-
-    // JSONPlaceholder não valida existência — retorna 200 mesmo sem o recurso
-    // API de produção real: deveria retornar 404 ou 500
     expect([200, 404, 500]).toContain(response.status());
   });
 
-  test('NEGATIVO — PATCH com payload vazio retorna 200 (sem alteração)', async ({ request }) => {
-    const response = await request.patch('/posts/1', {
-      data: {},
-    });
-
+  test('NEGATIVO — PATCH com payload vazio retorna 200 sem alteração', async ({ request }) => {
+    const response = await request.patch('/posts/1', { data: {} });
     expect(response.status()).toBe(200);
   });
 
-  test('NEGATIVO — PATCH com campo inexistente no schema', async ({ request }) => {
+  test('NEGATIVO — PATCH com campo fora do schema (documenta comportamento)', async ({ request }) => {
     const response = await request.patch('/posts/1', {
       data: { campoQueNaoExiste: 'valor', outroInvalido: 123 },
     });
-
-    // Documenta comportamento com campos não reconhecidos
     expect([200, 400]).toContain(response.status());
   });
 
@@ -175,7 +144,7 @@ test.describe('PATCH /posts/:id', () => {
 // ─────────────────────────────────────────────────────────────
 test.describe('PUT /users/:id', () => {
 
-  test('POSITIVO — atualiza dados de usuário via PUT', async ({ request }) => {
+  test('POSITIVO — atualiza usuário via PUT e valida contrato de retorno', async ({ request }) => {
     const updatedUser = {
       id: 1,
       name: 'Nome Atualizado Teste',
@@ -185,15 +154,13 @@ test.describe('PUT /users/:id', () => {
       website: 'ofertahub.com.br',
     };
 
-    const response = await request.put('/users/1', {
-      data: updatedUser,
-    });
+    const response = await request.put('/users/1', { data: updatedUser });
 
     expect(response.status()).toBe(200);
 
     const user = await response.json();
-    expect(user.name).toBe(updatedUser.name);
-    expect(user.email).toBe(updatedUser.email);
+    expect(user.name, 'Name deve refletir o update').toBe(updatedUser.name);
+    expect(user.email, 'Email deve refletir o update').toBe(updatedUser.email);
   });
 
 });

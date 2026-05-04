@@ -1,93 +1,93 @@
 /**
- * TAREFA 1 + 2 — Testes GET
- * Endpoint: /posts, /posts/:id, /users, /comments
- * Cobre: status codes, headers, corpo, cenários positivos e negativos
+ * Testes GET
+ * Endpoint: /posts, /posts/:id, /users, /comments, /todos
+ *
+ * Melhorias aplicadas:
+ * - Validação por contrato (schemas centralizados em contracts/schemas.js)
+ * - Validação de objetos aninhados (address, geo, company)
+ * - Assertions mais descritivas com mensagens de erro claras
  */
 
 const { test, expect } = require('@playwright/test');
+const { validateJsonHeaders } = require('../utils/helpers');
 const {
-  validateJsonHeaders,
-  validatePostStructure,
-  validateUserStructure,
-  validateCommentStructure,
-} = require('../utils/helpers');
+  validatePostContract,
+  validateCommentContract,
+  validateUserContract,
+} = require('../contracts/schemas');
 
 // ─────────────────────────────────────────────────────────────
 // GET /posts
 // ─────────────────────────────────────────────────────────────
 test.describe('GET /posts', () => {
 
-  test('POSITIVO — retorna lista de posts com status 200', async ({ request }) => {
+  test('POSITIVO — retorna lista de posts com status 200 e contrato válido', async ({ request }) => {
     const response = await request.get('/posts');
 
-    // Status code
     expect(response.status()).toBe(200);
-
-    // Headers
     await validateJsonHeaders(response, expect);
 
-    // Corpo
     const posts = await response.json();
-    expect(Array.isArray(posts)).toBe(true);
-    expect(posts.length).toBe(100);
+    expect(Array.isArray(posts), 'Resposta deve ser um array').toBe(true);
+    expect(posts.length, 'Lista deve conter 100 posts').toBe(100);
 
-    // Estrutura do primeiro item
-    validatePostStructure(posts[0], expect);
+    // Valida contrato dos 3 primeiros para não sobrecarregar
+    posts.slice(0, 3).forEach((post, i) => {
+      validatePostContract(post, expect);
+    });
   });
 
-  test('POSITIVO — filtra posts por userId via query param', async ({ request }) => {
+  test('POSITIVO — filtra posts por userId e valida todos os itens retornados', async ({ request }) => {
     const response = await request.get('/posts?userId=1');
 
     expect(response.status()).toBe(200);
 
     const posts = await response.json();
     expect(Array.isArray(posts)).toBe(true);
-    expect(posts.length).toBeGreaterThan(0);
+    expect(posts.length, 'Deve retornar posts para userId=1').toBeGreaterThan(0);
 
-    // Todos os posts devem pertencer ao userId=1
     posts.forEach(post => {
-      expect(post.userId).toBe(1);
+      expect(post.userId, `Todos os posts devem pertencer ao userId=1`).toBe(1);
+      validatePostContract(post, expect);
     });
   });
 
-  test('POSITIVO — retorna post específico por ID', async ({ request }) => {
+  test('POSITIVO — retorna post específico por ID com contrato completo', async ({ request }) => {
     const response = await request.get('/posts/1');
 
     expect(response.status()).toBe(200);
     await validateJsonHeaders(response, expect);
 
     const post = await response.json();
-    validatePostStructure(post, expect);
+    validatePostContract(post, expect);
     expect(post.id).toBe(1);
   });
 
-  test('POSITIVO — retorna post no limite máximo (id=100)', async ({ request }) => {
+  test('POSITIVO — retorna post no limite máximo (id=100) com contrato válido', async ({ request }) => {
     const response = await request.get('/posts/100');
 
     expect(response.status()).toBe(200);
+
     const post = await response.json();
+    validatePostContract(post, expect);
     expect(post.id).toBe(100);
   });
 
   test('NEGATIVO — post inexistente retorna 404', async ({ request }) => {
     const response = await request.get('/posts/99999');
 
-    expect(response.status()).toBe(404);
-
-    // Corpo deve ser objeto vazio ou mensagem de erro
+    expect(response.status(), 'ID inexistente deve retornar 404').toBe(404);
     const body = await response.json();
     expect(body).toBeDefined();
   });
 
   test('NEGATIVO — ID inválido (string) retorna 404', async ({ request }) => {
     const response = await request.get('/posts/nao-existe');
-
     expect(response.status()).toBe(404);
   });
 
   test('NEGATIVO — ID negativo retorna 404', async ({ request }) => {
     const response = await request.get('/posts/-1');
-
     expect(response.status()).toBe(404);
   });
 
@@ -98,7 +98,7 @@ test.describe('GET /posts', () => {
 // ─────────────────────────────────────────────────────────────
 test.describe('GET /users', () => {
 
-  test('POSITIVO — retorna lista de usuários com status 200', async ({ request }) => {
+  test('POSITIVO — retorna lista de usuários com contrato completo (incluindo objetos aninhados)', async ({ request }) => {
     const response = await request.get('/users');
 
     expect(response.status()).toBe(200);
@@ -106,38 +106,26 @@ test.describe('GET /users', () => {
 
     const users = await response.json();
     expect(Array.isArray(users)).toBe(true);
-    expect(users.length).toBe(10);
+    expect(users.length, 'Lista deve conter 10 usuários').toBe(10);
 
-    validateUserStructure(users[0], expect);
+    // Valida contrato completo com objetos aninhados
+    users.forEach(user => validateUserContract(user, expect));
   });
 
-  test('POSITIVO — retorna usuário específico por ID', async ({ request }) => {
+  test('POSITIVO — retorna usuário específico com todos os campos e objetos aninhados', async ({ request }) => {
     const response = await request.get('/users/1');
 
     expect(response.status()).toBe(200);
 
     const user = await response.json();
-    validateUserStructure(user, expect);
+    validateUserContract(user, expect);
     expect(user.id).toBe(1);
     expect(user.name).toBe('Leanne Graham');
   });
 
-  test('POSITIVO — usuário possui objeto address aninhado', async ({ request }) => {
-    const response = await request.get('/users/1');
-    const user = await response.json();
-
-    expect(user).toHaveProperty('address');
-    expect(user.address).toHaveProperty('street');
-    expect(user.address).toHaveProperty('city');
-    expect(user.address).toHaveProperty('geo');
-    expect(user.address.geo).toHaveProperty('lat');
-    expect(user.address.geo).toHaveProperty('lng');
-  });
-
   test('NEGATIVO — usuário inexistente retorna 404', async ({ request }) => {
     const response = await request.get('/users/99999');
-
-    expect(response.status()).toBe(404);
+    expect(response.status(), 'Usuário inexistente deve retornar 404').toBe(404);
   });
 
 });
@@ -147,7 +135,7 @@ test.describe('GET /users', () => {
 // ─────────────────────────────────────────────────────────────
 test.describe('GET /comments', () => {
 
-  test('POSITIVO — retorna comentários com status 200', async ({ request }) => {
+  test('POSITIVO — retorna comentários com contrato completo', async ({ request }) => {
     const response = await request.get('/comments');
 
     expect(response.status()).toBe(200);
@@ -155,31 +143,33 @@ test.describe('GET /comments', () => {
 
     const comments = await response.json();
     expect(Array.isArray(comments)).toBe(true);
-    expect(comments.length).toBe(500);
+    expect(comments.length, 'Lista deve conter 500 comentários').toBe(500);
 
-    validateCommentStructure(comments[0], expect);
+    comments.slice(0, 3).forEach(comment => validateCommentContract(comment, expect));
   });
 
-  test('POSITIVO — filtra comentários por postId', async ({ request }) => {
+  test('POSITIVO — filtra comentários por postId e valida contrato', async ({ request }) => {
     const response = await request.get('/comments?postId=1');
 
     expect(response.status()).toBe(200);
 
     const comments = await response.json();
     expect(comments.length).toBeGreaterThan(0);
-    comments.forEach(c => expect(c.postId).toBe(1));
+    comments.forEach(comment => {
+      expect(comment.postId, 'Todos devem pertencer ao postId=1').toBe(1);
+      validateCommentContract(comment, expect);
+    });
   });
 
-  test('POSITIVO — email nos comentários é válido', async ({ request }) => {
+  test('POSITIVO — email nos comentários é válido (formato RFC)', async ({ request }) => {
     const response = await request.get('/comments/1');
     const comment = await response.json();
 
-    expect(comment.email).toMatch(/^[^\s@]+@[^\s@]+\.[^\s@]+$/);
+    validateCommentContract(comment, expect);
   });
 
   test('NEGATIVO — comentário inexistente retorna 404', async ({ request }) => {
     const response = await request.get('/comments/99999');
-
     expect(response.status()).toBe(404);
   });
 
@@ -188,26 +178,24 @@ test.describe('GET /comments', () => {
 
     expect(response.status()).toBe(200);
     const comments = await response.json();
-    expect(comments).toEqual([]);
+    expect(comments, 'PostId inválido deve retornar array vazio').toEqual([]);
   });
 
 });
 
 // ─────────────────────────────────────────────────────────────
-// GET — Headers e performance
+// GET — Headers e Performance
 // ─────────────────────────────────────────────────────────────
-test.describe('GET — Validação de Headers', () => {
+test.describe('GET — Validação de Headers e Performance', () => {
 
-  test('POSITIVO — resposta inclui header Content-Type JSON', async ({ request }) => {
+  test('POSITIVO — resposta inclui Content-Type JSON', async ({ request }) => {
     const response = await request.get('/posts/1');
-    const ct = response.headers()['content-type'];
-    expect(ct).toContain('application/json');
+    expect(response.headers()['content-type']).toContain('application/json');
   });
 
-  test('POSITIVO — resposta não retorna Content-Type HTML em endpoint JSON', async ({ request }) => {
+  test('POSITIVO — resposta não retorna Content-Type HTML', async ({ request }) => {
     const response = await request.get('/posts/1');
-    const ct = response.headers()['content-type'];
-    expect(ct).not.toContain('text/html');
+    expect(response.headers()['content-type']).not.toContain('text/html');
   });
 
   test('POSITIVO — resposta retorna em menos de 5 segundos', async ({ request }) => {
@@ -216,7 +204,7 @@ test.describe('GET — Validação de Headers', () => {
     const duration = Date.now() - start;
 
     expect(response.status()).toBe(200);
-    expect(duration).toBeLessThan(5000);
+    expect(duration, `Resposta demorou ${duration}ms, limite é 5000ms`).toBeLessThan(5000);
   });
 
 });
